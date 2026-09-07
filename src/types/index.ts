@@ -24,6 +24,7 @@ export interface Lesson {
   pdfUrl?: string;
   readingContent?: string;
   resources?: { label: string; url: string }[];
+  quizQuestions?: QuizQuestion[];
 }
 
 export interface Module {

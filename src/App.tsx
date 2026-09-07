@@ -15,8 +15,6 @@ import { CoursePlayerPage } from '@/pages/course-player';
 import { AICoachPage } from '@/pages/ai-coach';
 import { MyCoursesPage } from '@/pages/my-courses';
 import { LearningPathsPage } from '@/pages/learning-paths';
-import { QuizzesPage } from '@/pages/quizzes';
-import { LabsPage } from '@/pages/labs';
 import { AchievementsPage } from '@/pages/achievements';
 import { SkillsPage } from '@/pages/skills';
 import { SettingsPage } from '@/pages/settings';
@@ -64,8 +62,6 @@ export default function App() {
                 <Route path="my-courses" element={<MyCoursesPage />} />
                 <Route path="paths" element={<LearningPathsPage />} />
                 <Route path="ai-coach" element={<AICoachPage />} />
-                <Route path="quizzes" element={<QuizzesPage />} />
-                <Route path="labs" element={<LabsPage />} />
                 <Route path="achievements" element={<AchievementsPage />} />
                 <Route path="skills" element={<SkillsPage />} />
                 <Route path="settings" element={<SettingsPage />} />

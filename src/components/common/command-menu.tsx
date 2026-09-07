@@ -74,7 +74,7 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
               <CommandItem
                 icon={<Sparkles className="h-4 w-4 text-primary" />}
                 label="Generate a practice quiz"
-                onSelect={() => go('/student/quizzes')}
+                onSelect={() => go('/student/browse')}
               />
               <CommandItem
                 icon={<Sparkles className="h-4 w-4 text-primary" />}

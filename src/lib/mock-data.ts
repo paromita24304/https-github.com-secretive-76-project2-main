@@ -126,6 +126,68 @@ export const courses: Course[] = [
             type: 'quiz',
             completed: true,
             description: 'Test your understanding of attention mechanics.',
+            quizQuestions: [
+              {
+                id: 'l4_q1',
+                question: 'In scaled dot-product attention, why do we divide QKᵀ by √d_k?',
+                options: [
+                  'To speed up computation',
+                  'To keep gradient variance stable as dimensionality grows',
+                  'To normalize the embeddings to unit length',
+                  'To prevent attention weights from becoming negative',
+                ],
+                correctIndex: 1,
+                explanation:
+                  'As d_k grows, dot products get large, pushing softmax into regions with tiny gradients. Dividing by √d_k keeps variance stable.',
+              },
+              {
+                id: 'l4_q2',
+                question: 'What does the Value (V) matrix represent in attention?',
+                options: [
+                  'What am I looking for?',
+                  'What do I contain?',
+                  'What information do I pass along?',
+                  'How important is this token?',
+                ],
+                correctIndex: 2,
+                explanation:
+                  'Query = "what am I looking for", Key = "what do I contain", Value = "what information do I pass along".',
+              },
+              {
+                id: 'l4_q3',
+                question: 'Multi-head attention runs h parallel heads primarily to:',
+                options: [
+                  'Reduce total computation',
+                  'Allow the model to attend to different relationships simultaneously',
+                  'Increase the receptive field',
+                  'Replace the need for positional encoding',
+                ],
+                correctIndex: 1,
+                explanation:
+                  'Different heads can learn to track different relationships — one might focus on syntax, another on semantics.',
+              },
+              {
+                id: 'l4_q4',
+                question: 'Positional encodings are needed in transformers because:',
+                options: [
+                  'Self-attention is permutation-invariant',
+                  'They replace the need for embeddings',
+                  'They reduce overfitting',
+                  'They normalize activations',
+                ],
+                correctIndex: 0,
+                explanation:
+                  'Without positional encoding, attention treats the input as a bag of tokens — order does not matter.',
+              },
+              {
+                id: 'l4_q5',
+                question: 'In multi-head attention, each head projects Q, K, V into a space of dimension:',
+                options: ['d_model', 'd_model / h', 'h × d_model', 'd_k only'],
+                correctIndex: 1,
+                explanation:
+                  'Each head operates in a lower-dimensional space d_model/h so the total cost stays the same as single-head attention.',
+              },
+            ],
           },
         ],
       },
@@ -675,8 +737,6 @@ export const navGroups = [
     label: 'Practice',
     items: [
       { label: 'AI Coach', to: '/student/ai-coach', icon: 'Sparkles', badge: 'AI' },
-      { label: 'Quizzes', to: '/student/quizzes', icon: 'ListChecks' },
-      { label: 'Labs', to: '/student/labs', icon: 'FlaskConical' },
     ],
   },
   {

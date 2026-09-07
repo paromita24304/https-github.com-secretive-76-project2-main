@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useParams, useSearchParams, Navigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -27,12 +27,13 @@ import { Logo } from '@/components/common/logo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { VideoPlayer } from '@/components/player/video-player';
 import { PdfViewer } from '@/components/player/pdf-viewer';
 import { NotesPanel } from '@/components/player/notes-panel';
+import { InlineQuiz } from '@/components/player/inline-quiz';
 import { getCourseBySlug, getAllLessons, getLessonById } from '@/lib/course-utils';
 import { useLessonProgress } from '@/hooks/use-lesson-progress';
+import { useEnrollments, useQuizResults, useUserStats, useAchievements } from '@/hooks/use-student-data';
 import { formatDuration } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Lesson } from '@/types';
@@ -58,11 +59,14 @@ export function CoursePlayerPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const course = slug ? getCourseBySlug(slug) : undefined;
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { isCompleted, markComplete, loading: progressLoading } = useLessonProgress(course?.id ?? '');
+  const { enroll, updateProgress } = useEnrollments();
+  const { saveResult } = useQuizResults();
+  const { updateStreak, addSkillPoints, incrementQuizzesPassed, incrementLabsCompleted, incrementCoursesCompleted, addHours } = useUserStats();
+  const { unlock } = useAchievements();
 
   const allLessons = useMemo(() => (course ? getAllLessons(course) : []), [course]);
 
@@ -77,6 +81,26 @@ export function CoursePlayerPage() {
 
   const completedCount = allLessons.filter((l) => isCompleted(l.id)).length;
   const progressPct = allLessons.length > 0 ? Math.round((completedCount / allLessons.length) * 100) : 0;
+
+  // Auto-enroll when entering the player
+  useEffect(() => {
+    if (course) {
+      enroll(course.slug);
+      updateStreak();
+    }
+  }, [course, enroll, updateStreak]);
+
+  // Update enrollment progress when completedCount changes
+  useEffect(() => {
+    if (course && progressPct > 0) {
+      const isCourseComplete = progressPct === 100;
+      updateProgress(course.slug, progressPct, isCourseComplete);
+      if (isCourseComplete) {
+        incrementCoursesCompleted();
+        unlock('a_graduation');
+      }
+    }
+  }, [course, progressPct, updateProgress, incrementCoursesCompleted, unlock]);
 
   useEffect(() => {
     if (!currentLessonId && allLessons[0]) {
@@ -97,15 +121,55 @@ export function CoursePlayerPage() {
     setMobileMenuOpen(false);
   };
 
-  const handleComplete = () => {
+  const handleComplete = useCallback(() => {
     markComplete(currentLesson.id);
+    addSkillPoints(20);
+    addHours(currentLesson.durationMinutes / 60);
+
+    // Check for achievement triggers
+    if (currentLesson.type === 'lab') {
+      incrementLabsCompleted();
+      if (completedCount + 1 >= 10) unlock('a_5');
+    }
+
     toast.success('Lesson completed', {
       description: nextLesson ? 'Moving to the next lesson.' : 'You finished the course!',
     });
+
     if (nextLesson) {
       setTimeout(() => navigateToLesson(nextLesson.id), 600);
     }
-  };
+  }, [currentLesson, markComplete, addSkillPoints, addHours, nextLesson, incrementLabsCompleted, completedCount, unlock]);
+
+  const handleQuizComplete = useCallback(
+    (score: number, correctAnswers: number, totalQuestions: number, passed: boolean) => {
+      if (!currentLesson.quizQuestions) return;
+
+      saveResult(currentLesson.id, currentLesson.title, score, totalQuestions, correctAnswers);
+
+      if (passed) {
+        markComplete(currentLesson.id);
+        incrementQuizzesPassed();
+        addSkillPoints(50);
+
+        // Achievement: Quiz Master — pass 50 quizzes with 90%+
+        if (score >= 90) {
+          unlock('a_2');
+        }
+        // Achievement: Perfectionist — score 100% on 10 quizzes
+        if (score === 100) {
+          unlock('a_12');
+        }
+        // Achievement: First Steps — complete your first lesson
+        unlock('a_3');
+
+        if (nextLesson) {
+          setTimeout(() => navigateToLesson(nextLesson.id), 800);
+        }
+      }
+    },
+    [currentLesson, saveResult, markComplete, incrementQuizzesPassed, addSkillPoints, unlock, nextLesson]
+  );
 
   const goToNext = () => {
     if (nextLesson) navigateToLesson(nextLesson.id);
@@ -149,8 +213,7 @@ export function CoursePlayerPage() {
         <aside className="hidden w-72 shrink-0 border-r border-border bg-card lg:flex lg:flex-col">
           <LessonSidebar
             course={course}
-            allLessons={allLessons}
-            currentLessonId={currentLessonId}
+            currentLessonId={currentLessonId ?? ''}
             isCompleted={isCompleted}
             onNavigate={navigateToLesson}
             progressPct={progressPct}
@@ -172,8 +235,7 @@ export function CoursePlayerPage() {
               </div>
               <LessonSidebar
                 course={course}
-                allLessons={allLessons}
-                currentLessonId={currentLessonId}
+                currentLessonId={currentLessonId ?? ''}
                 isCompleted={isCompleted}
                 onNavigate={navigateToLesson}
                 progressPct={progressPct}
@@ -227,8 +289,23 @@ export function CoursePlayerPage() {
                   <ReadingContent content={currentLesson.readingContent} />
                 ) : currentLesson.type === 'ai-coaching' ? (
                   <AICoachingPlaceholder lessonTitle={currentLesson.title} />
+                ) : currentLesson.type === 'quiz' && currentLesson.quizQuestions ? (
+                  <InlineQuiz
+                    quizId={currentLesson.id}
+                    quizTitle={currentLesson.title}
+                    questions={currentLesson.quizQuestions}
+                    onComplete={handleQuizComplete}
+                  />
                 ) : currentLesson.type === 'quiz' ? (
-                  <QuizPlaceholder />
+                  <div className="grid place-items-center rounded-xl border border-dashed border-info/30 bg-info/5 p-8 text-center">
+                    <div className="grid h-14 w-14 place-items-center rounded-2xl bg-info/10">
+                      <ListChecks className="h-7 w-7 text-info" />
+                    </div>
+                    <h3 className="mt-4 font-semibold text-foreground">Quiz coming soon</h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      This quiz is being prepared. Check back shortly.
+                    </p>
+                  </div>
                 ) : (
                   <div className="grid aspect-video place-items-center rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground">
                     <div className="text-center">
@@ -276,21 +353,23 @@ export function CoursePlayerPage() {
                     <ChevronRight className="ml-1 h-4 w-4" />
                   </Button>
                 </div>
-                <Button
-                  onClick={handleComplete}
-                  variant={lessonDone ? 'secondary' : 'default'}
-                  size="sm"
-                  disabled={progressLoading}
-                >
-                  {progressLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : lessonDone ? (
-                    <CheckCircle2 className="mr-2 h-4 w-4 text-success" />
-                  ) : (
-                    <Check className="mr-2 h-4 w-4" />
-                  )}
-                  {lessonDone ? 'Completed' : 'Mark as complete'}
-                </Button>
+                {currentLesson.type !== 'quiz' && (
+                  <Button
+                    onClick={handleComplete}
+                    variant={lessonDone ? 'secondary' : 'default'}
+                    size="sm"
+                    disabled={progressLoading}
+                  >
+                    {progressLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : lessonDone ? (
+                      <CheckCircle2 className="mr-2 h-4 w-4 text-success" />
+                    ) : (
+                      <Check className="mr-2 h-4 w-4" />
+                    )}
+                    {lessonDone ? 'Completed' : 'Mark as complete'}
+                  </Button>
+                )}
               </div>
 
               {/* Mobile notes toggle */}
@@ -328,7 +407,6 @@ export function CoursePlayerPage() {
 
 function LessonSidebar({
   course,
-  allLessons,
   currentLessonId,
   isCompleted,
   onNavigate,
@@ -336,8 +414,7 @@ function LessonSidebar({
   completedCount,
   totalCount,
 }: {
-  course: ReturnType<typeof getCourseBySlug>;
-  allLessons: ReturnType<typeof getAllLessons>;
+  course: NonNullable<ReturnType<typeof getCourseBySlug>>;
   currentLessonId: string;
   isCompleted: (id: string) => boolean;
   onNavigate: (id: string) => void;
@@ -345,7 +422,6 @@ function LessonSidebar({
   completedCount: number;
   totalCount: number;
 }) {
-  if (!course) return null;
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border p-4">
@@ -461,26 +537,6 @@ function AICoachingPlaceholder({ lessonTitle }: { lessonTitle: string }) {
         <Link to="/student/ai-coach">
           <Sparkles className="mr-2 h-4 w-4 text-teal" />
           Start coaching session
-        </Link>
-      </Button>
-    </div>
-  );
-}
-
-function QuizPlaceholder() {
-  return (
-    <div className="grid place-items-center rounded-xl border border-dashed border-info/30 bg-info/5 p-8 text-center">
-      <div className="grid h-14 w-14 place-items-center rounded-2xl bg-info/10">
-        <ListChecks className="h-7 w-7 text-info" />
-      </div>
-      <h3 className="mt-4 font-semibold text-foreground">Quiz ready to begin</h3>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-        Test your understanding with adaptive questions tuned to your progress.
-      </p>
-      <Button className="mt-4" asChild>
-        <Link to="/student/quizzes">
-          <ListChecks className="mr-2 h-4 w-4" />
-          Start quiz
         </Link>
       </Button>
     </div>
